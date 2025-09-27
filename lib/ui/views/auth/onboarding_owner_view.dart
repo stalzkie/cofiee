@@ -42,6 +42,11 @@ class _OnboardingOwnerViewState extends State<OnboardingOwnerView> {
   File? _businessPermitFile;
   File? _dtiFile;
 
+  // Gallery (up to 10 images)
+  final _picker = ImagePicker();
+  final List<File> _gallery = [];
+  static const int _galleryLimit = 10;
+
   @override
   void dispose() {
     _displayNameCtrl.dispose();
@@ -56,8 +61,7 @@ class _OnboardingOwnerViewState extends State<OnboardingOwnerView> {
   }
 
   Future<void> _pickFile(bool isPermit) async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery);
+    final picked = await _picker.pickImage(source: ImageSource.gallery);
     if (picked != null) {
       setState(() {
         if (isPermit) {
@@ -69,6 +73,18 @@ class _OnboardingOwnerViewState extends State<OnboardingOwnerView> {
     }
   }
 
+  Future<void> _pickGalleryImages() async {
+    final remaining = _galleryLimit - _gallery.length;
+    if (remaining <= 0) return;
+
+    final files = await _picker.pickMultiImage(imageQuality: 90);
+    if (files.isEmpty) return;
+
+    setState(() {
+      _gallery.addAll(files.take(remaining).map((x) => File(x.path)));
+    });
+  }
+
   Future<String?> _uploadFile(File file, String prefix) async {
     final supabase = Supabase.instance.client;
     final uid = supabase.auth.currentUser!.id;
@@ -77,6 +93,21 @@ class _OnboardingOwnerViewState extends State<OnboardingOwnerView> {
 
     await supabase.storage.from('documents').upload(path, file);
     return supabase.storage.from('documents').getPublicUrl(path);
+  }
+
+  Future<void> _uploadGalleryImages(String shopId) async {
+    final supabase = Supabase.instance.client;
+    for (final file in _gallery) {
+      final objectName = 'shop_gallery/$shopId/${const Uuid().v4()}.jpg';
+      await supabase.storage.from('shop-gallery').upload(objectName, file);
+      final publicUrl =
+          supabase.storage.from('shop-gallery').getPublicUrl(objectName);
+
+      await supabase.from('shop_images').insert({
+        'shop_id': shopId,
+        'url': publicUrl,
+      });
+    }
   }
 
   @override
@@ -110,11 +141,7 @@ class _OnboardingOwnerViewState extends State<OnboardingOwnerView> {
                 // Display name
                 const Text('Your Display Name'),
                 const SizedBox(height: 6),
-                CupertinoTextField(
-                  controller: _displayNameCtrl,
-                  placeholder: 'e.g., Juan D.',
-                  textInputAction: TextInputAction.next,
-                ),
+                CupertinoTextField(controller: _displayNameCtrl),
                 const SizedBox(height: 16),
 
                 // Business Permit upload
@@ -125,7 +152,7 @@ class _OnboardingOwnerViewState extends State<OnboardingOwnerView> {
                   onPressed: () => _pickFile(true),
                   child: Text(_businessPermitFile == null
                       ? 'Upload Business Permit'
-                      : '✓ Business Permit Selected'),
+                      : '✓ Selected'),
                 ),
                 const SizedBox(height: 16),
 
@@ -135,9 +162,8 @@ class _OnboardingOwnerViewState extends State<OnboardingOwnerView> {
                 CupertinoButton(
                   color: CupertinoColors.systemGrey5,
                   onPressed: () => _pickFile(false),
-                  child: Text(_dtiFile == null
-                      ? 'Upload DTI Certificate'
-                      : '✓ DTI Certificate Selected'),
+                  child: Text(
+                      _dtiFile == null ? 'Upload DTI Certificate' : '✓ Selected'),
                 ),
                 const SizedBox(height: 16),
 
@@ -158,31 +184,20 @@ class _OnboardingOwnerViewState extends State<OnboardingOwnerView> {
                   const Divider(height: 24),
                   const Text('Shop Name'),
                   const SizedBox(height: 6),
-                  CupertinoTextField(
-                    controller: _shopNameCtrl,
-                    placeholder: 'e.g., Cofiee Bacolod',
-                    textInputAction: TextInputAction.next,
-                  ),
+                  CupertinoTextField(controller: _shopNameCtrl),
                   const SizedBox(height: 12),
 
                   const Text('Address'),
                   const SizedBox(height: 6),
-                  CupertinoTextField(
-                    controller: _addressCtrl,
-                    placeholder: 'Street, City, Province',
-                    textInputAction: TextInputAction.next,
-                  ),
+                  CupertinoTextField(controller: _addressCtrl),
                   const SizedBox(height: 12),
 
                   const Text('Description (optional)'),
                   const SizedBox(height: 6),
-                  CupertinoTextField(
-                    controller: _descCtrl,
-                    placeholder: 'Short blurb about your shop',
-                    maxLines: 2,
-                  ),
+                  CupertinoTextField(controller: _descCtrl, maxLines: 2),
                   const SizedBox(height: 12),
 
+                  // Wi-Fi
                   Row(
                     children: [
                       const Text('Wi-Fi available'),
@@ -193,106 +208,67 @@ class _OnboardingOwnerViewState extends State<OnboardingOwnerView> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
 
+                  // Gallery
                   Row(
                     children: [
-                      const Text('Verified (admin use)'),
+                      const Text('Gallery (up to 10)'),
                       const Spacer(),
-                      CupertinoSwitch(
-                        value: _isVerified,
-                        onChanged: (v) => setState(() => _isVerified = v),
+                      CupertinoButton(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        color: CupertinoColors.activeBlue,
+                        onPressed: _pickGalleryImages,
+                        child: const Text('Add Photos',
+                            style: TextStyle(color: CupertinoColors.white)),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-
-                  // Opening time
-                  const Text('Opening Time (optional)'),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: CupertinoButton(
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          color: CupertinoColors.systemGrey5,
-                          onPressed: () => _pickTime(context),
-                          child: Text(
-                            _openingTime == null
-                                ? 'Pick time'
-                                : _formatTime(_openingTime!),
-                            style: const TextStyle(color: CupertinoColors.label),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: _gallery.map((f) {
+                      return Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Container(
+                            width: 96,
+                            height: 96,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              image: DecorationImage(
+                                image: FileImage(f),
+                                fit: BoxFit.cover,
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    ],
+                          Positioned(
+                            top: -8,
+                            right: -8,
+                            child: CupertinoButton(
+                              padding: const EdgeInsets.all(6),
+                              color: CupertinoColors.systemRed,
+                              borderRadius: BorderRadius.circular(16),
+                              onPressed: () {
+                                setState(() => _gallery.remove(f));
+                              },
+                              child: const Icon(Icons.close,
+                                  size: 16, color: CupertinoColors.white),
+                            ),
+                          ),
+                        ],
+                      );
+                    }).toList(),
                   ),
-                  const SizedBox(height: 12),
-
-                  // Capacity
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _LabeledField(
-                          label: 'Seat Capacity',
-                          controller: _seatCapCtrl,
-                          keyboardType:
-                              const TextInputType.numberWithOptions(decimal: false),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _LabeledField(
-                          label: 'Seats Available',
-                          controller: _seatsAvailCtrl,
-                          keyboardType:
-                              const TextInputType.numberWithOptions(decimal: false),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Coordinates
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _LabeledField(
-                          label: 'Latitude (optional)',
-                          controller: _latCtrl,
-                          keyboardType:
-                              const TextInputType.numberWithOptions(decimal: true),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _LabeledField(
-                          label: 'Longitude (optional)',
-                          controller: _lngCtrl,
-                          keyboardType:
-                              const TextInputType.numberWithOptions(decimal: true),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    kUseLatLngColumns
-                        ? 'Your DB expects numeric lat/lng columns.'
-                        : 'Your DB expects geometry in `location`. If lat/lng supplied, we will send GeoJSON Point.',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: CupertinoColors.systemGrey,
-                    ),
-                  ),
+                  const SizedBox(height: 20),
                 ],
 
-                if (_error != null) ...[
-                  const SizedBox(height: 16),
+                if (_error != null)
                   Text(_error!,
                       style: const TextStyle(
                           color: CupertinoColors.systemRed, fontSize: 14)),
-                ],
 
                 const SizedBox(height: 16),
                 CupertinoButton.filled(
@@ -309,7 +285,7 @@ class _OnboardingOwnerViewState extends State<OnboardingOwnerView> {
                               throw Exception("Not signed in.");
                             }
 
-                            // Upload files
+                            // Upload docs
                             String? permitUrl;
                             String? dtiUrl;
                             if (_businessPermitFile != null) {
@@ -320,7 +296,7 @@ class _OnboardingOwnerViewState extends State<OnboardingOwnerView> {
                               dtiUrl = await _uploadFile(_dtiFile!, "dti");
                             }
 
-                            // Promote profile to owner
+                            // Promote profile
                             await supabase.from('profiles').upsert({
                               'id': user.id,
                               'role': 'owner',
@@ -328,9 +304,8 @@ class _OnboardingOwnerViewState extends State<OnboardingOwnerView> {
                                 'display_name': _displayNameCtrl.text.trim(),
                               if (permitUrl != null) 'permit_url': permitUrl,
                               if (dtiUrl != null) 'dti_url': dtiUrl,
-                            }, onConflict: 'id');
+                            });
 
-                            // Create shop if requested
                             if (_createShopNow) {
                               final shopId = const Uuid().v4();
                               final name = _shopNameCtrl.text.trim();
@@ -350,7 +325,7 @@ class _OnboardingOwnerViewState extends State<OnboardingOwnerView> {
                                   ? null
                                   : _toHHmmss(_openingTime!);
 
-                              final payload = <String, dynamic>{
+                              final payload = {
                                 'id': shopId,
                                 'owner_id': user.id,
                                 'name': name,
@@ -379,6 +354,9 @@ class _OnboardingOwnerViewState extends State<OnboardingOwnerView> {
                               }
 
                               await supabase.from('coffee_shops').insert(payload);
+
+                              // Upload gallery
+                              await _uploadGalleryImages(shopId);
                             }
 
                             if (!mounted) return;
@@ -392,14 +370,6 @@ class _OnboardingOwnerViewState extends State<OnboardingOwnerView> {
                   child: _submitting
                       ? const CupertinoActivityIndicator()
                       : const Text('Finish Onboarding'),
-                ),
-                const SizedBox(height: 10),
-                CupertinoButton(
-                  onPressed: _submitting
-                      ? null
-                      : () => Navigator.of(context)
-                          .pushReplacementNamed(AppRoutes.map),
-                  child: const Text('Skip for now'),
                 ),
               ],
             ),
@@ -427,47 +397,6 @@ class _OnboardingOwnerViewState extends State<OnboardingOwnerView> {
         ],
       ),
     );
-  }
-
-  Future<void> _pickTime(BuildContext context) async {
-    await showCupertinoModalPopup(
-      context: context,
-      builder: (_) {
-        TimeOfDay temp = _openingTime ?? const TimeOfDay(hour: 9, minute: 0);
-        return Container(
-          height: 260,
-          color: CupertinoColors.systemBackground.resolveFrom(context),
-          child: Column(
-            children: [
-              Expanded(
-                child: CupertinoDatePicker(
-                  mode: CupertinoDatePickerMode.time,
-                  use24hFormat: true,
-                  initialDateTime:
-                      DateTime(2000, 1, 1, temp.hour, temp.minute),
-                  onDateTimeChanged: (dt) {
-                    temp = TimeOfDay(hour: dt.hour, minute: dt.minute);
-                  },
-                ),
-              ),
-              CupertinoButton(
-                child: const Text('Done'),
-                onPressed: () {
-                  setState(() => _openingTime = temp);
-                  Navigator.of(context).pop();
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  String _formatTime(TimeOfDay t) {
-    final h = t.hour.toString().padLeft(2, '0');
-    final m = t.minute.toString().padLeft(2, '0');
-    return '$h:$m';
   }
 
   String _toHHmmss(TimeOfDay t) {
