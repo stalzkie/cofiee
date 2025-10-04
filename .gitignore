@@ -12,6 +12,7 @@
 .swiftpm/
 migrate_working_dir/
 lib/app/env.dart
+android/app/src/main/AndroidManifest.xml
 
 # IntelliJ related
 *.iml

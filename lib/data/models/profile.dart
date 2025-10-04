@@ -1,6 +1,4 @@
-import 'package:flutter/material.dart';
 import '../../core/utils/enums.dart';
-import '../../core/utils/converters.dart';
 
 
 class Profile {

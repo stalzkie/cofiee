@@ -64,7 +64,7 @@ class _ShopDetailViewState extends State<ShopDetailView> {
 
   Widget _buildContent(CoffeeShop shop) {
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-    final isOwner = shop.ownerId == currentUserId;
+    final isOwner = shop.owner_id == currentUserId;
 
     return FutureBuilder<List<String>>(
       future: _fetchGalleryImages(shop.id),

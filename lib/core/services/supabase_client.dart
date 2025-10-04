@@ -2,7 +2,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../app/env.dart';
 import '../error/failure.dart';
 
-/// Singleton class to hold the Supabase client
 class SupabaseService {
   static final SupabaseService _instance = SupabaseService._internal();
   late final SupabaseClient client;
@@ -11,7 +10,6 @@ class SupabaseService {
 
   SupabaseService._internal();
 
-  /// Initialize Supabase — call this once in main.dart before runApp()
   static Future<void> init() async {
     try {
       await Supabase.initialize(
@@ -24,6 +22,6 @@ class SupabaseService {
     }
   }
 
-  /// Get the Supabase client anywhere
-  static SupabaseClient getClient() => _instance.client;
+  /// ✅ Now you can just call SupabaseService.instanceClient
+  static SupabaseClient get instanceClient => _instance.client;
 }

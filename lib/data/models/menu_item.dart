@@ -43,7 +43,7 @@ class MenuItem {
       };
 
   Map<String, dynamic> toMapForUpdate() => {
-        if (category != null) 'category': categoryToText(category),
+        'category': categoryToText(category),
         if (name.isNotEmpty) 'name': name,
         'description': description,
         'price': price,
